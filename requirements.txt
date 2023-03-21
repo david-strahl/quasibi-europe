@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+xarray
+tqdm
+loguru
+cartopy
