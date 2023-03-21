@@ -41,6 +41,7 @@ Questions that need to be answered here:
 Questions that need to be answered here:
 - Should windows overlap?
 - How many windows are resonable (depends on runtime of stationary analysis per time step)
+- Can you re-use the surrogate networks here or do you need to generate new ones for every window
 
 ## Questions to Answer in the Report
 
