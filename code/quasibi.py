@@ -4,10 +4,60 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from loguru import logger
 
-from pyunicorn.timeseries import RecurrencePlot
-from pyunicorn.timeseries.surrogates import Surrogates
+# from pyunicorn.timeseries import RecurrencePlot
+# from pyunicorn.timeseries.surrogates import Surrogates
 
 np.seterr(all="ignore")
+
+
+def save_symmat(m, path):
+    """
+    Saves a symmetric matrix in condensed form as a .np file.
+    """
+    np.save(path, sp.spatial.distance.squareform(m))
+
+
+def load_symmat(path):
+    """
+    Loads a symmetric matrix from a condensed .np file.
+    """
+    return sp.spatial.distance.squareform(np.load(path))
+
+
+def RecurrencePlot(y, recurrence_rate=0.1, threshold=None, **kwargs):
+
+    # expand dimension for pdist
+    if len(y.shape) == 1:
+        y = np.expand_dims(y, axis=1)
+
+    # calculate the distance between phase vectors
+    rp = sp.spatial.distance.squareform(sp.spatial.distance.pdist(y, 'euclidean'))
+    rp = np.nan_to_num(rp, nan=np.inf)
+
+    # use recurrence rate to determine threshold
+    if threshold is None:
+        threshold = np.quantile(rp, recurrence_rate)
+
+    return rp <= threshold
+
+
+def create_surrogates(y, n_surrogates=1):
+    """
+    Generates surrogates by shuffling the time series.
+
+    Parameters
+    ----------
+    y: (n,) array
+        time series to generate the surrogate for
+    n_surrogates: int
+        number of surrogate to generate
+
+    Returns
+    -------
+    A list of surrogates or the only surrogates
+    """
+    surrogates = np.array([np.random.permutation(y) for n in range(n_surrogates)])
+    return surrogates if n_surrogates > 1 else n_surrogates[0]
 
 
 def pearson(yi, yj):
@@ -39,12 +89,12 @@ def rmd(yi, yj, recurrence_rate=0.1, **kwargs):
 
     # generate the recurrence plots
     # TODO: the function uses the supremum norm, is this okay?
-    irp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
-    jrp = RecurrencePlot(yj, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
+    #irp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
+    #jrp = RecurrencePlot(yj, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
 
     # get the recurrence matrices
-    irp = irp.recurrence_matrix().copy()
-    jrp = jrp.recurrence_matrix().copy()
+    irp = RecurrencePlot(yi, recurrence_rate=recurrence_rate)
+    jrp = RecurrencePlot(yj, recurrence_rate=recurrence_rate)
 
     # calculate the column recurrence rate
     Pij = np.mean(irp*jrp, axis=1)
@@ -57,43 +107,43 @@ def rmd(yi, yj, recurrence_rate=0.1, **kwargs):
     return rmd if np.isfinite(rmd) else 0
 
 
-def create_surrogates(y, n_surrogates=1, threshold=None, dimension=1, delay=0):
-    """
-    Generates twin surrogates of a time series `y`.
-
-    The surrogates are generated using the function `pyunicorn.twin_surrogates`.
-
-    Parameters
-    ----------
-    y: (n,) array
-        Time series for which the surrogates should be generated.
-    n_surrogates: int
-        Number of surrogates to generate.
-    threshold: float
-        Distance threshold in phase space to determine twins.
-    dimension: int, default 0
-        Dimension for embedding
-    delay: int, default 0
-        Delay for twin creation.
-
-    Returns
-    -------
-    surrogates: (n_surrogates, n) or (n)
-        Sequence of surrogates or only generated surrogate.
-    """
-
-    # use 1% of the phase space extension as a threshold for the recurrence plot
-    if threshold is None:
-        threshold = 0.01*np.max(np.diff(y))
-
-    # set up surrogate generator
-    surrogate_generator = Surrogates(y, silence_level=100)
-    surrogate_generator.clear_cache()
-
-    # generate S surrogates
-    surrogates = np.array([surrogate_generator.twin_surrogates(np.array([y]), dimension, delay, threshold) for s in range(n_surrogates)]).squeeze()
-
-    return surrogates if n_surrogates > 1 else np.array([surrogates])
+# def create_surrogates(y, n_surrogates=1, threshold=None, dimension=1, delay=0):
+#     """
+#     Generates twin surrogates of a time series `y`.
+#
+#     The surrogates are generated using the function `pyunicorn.twin_surrogates`.
+#
+#     Parameters
+#     ----------
+#     y: (n,) array
+#         Time series for which the surrogates should be generated.
+#     n_surrogates: int
+#         Number of surrogates to generate.
+#     threshold: float
+#         Distance threshold in phase space to determine twins.
+#     dimension: int, default 0
+#         Dimension for embedding
+#     delay: int, default 0
+#         Delay for twin creation.
+#
+#     Returns
+#     -------
+#     surrogates: (n_surrogates, n) or (n)
+#         Sequence of surrogates or only generated surrogate.
+#     """
+#
+#     # use 1% of the phase space extension as a threshold for the recurrence plot
+#     if threshold is None:
+#         threshold = 0.01*np.max(np.diff(y))
+#
+#     # set up surrogate generator
+#     surrogate_generator = Surrogates(y, silence_level=100)
+#     surrogate_generator.clear_cache()
+#
+#     # generate S surrogates
+#     surrogates = np.array([surrogate_generator.twin_surrogates(np.array([y]), dimension, delay, threshold) for s in range(n_surrogates)]).squeeze()
+#
+#     return surrogates if n_surrogates > 1 else np.array([surrogates])
 
 
 def correlation_matrix(ys, n_surrogates=10, recurrence_rate=0.1, metric=pearson,
@@ -123,12 +173,12 @@ def correlation_matrix(ys, n_surrogates=10, recurrence_rate=0.1, metric=pearson,
                     C[i, j] = metric(yi, yj, **kwargs)
 
                     # retrieve the recurrence threshold
-                    rp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10)
-                    threshold = rp.threshold_from_recurrence_rate(rp.distance_matrix(1, "supremum"), recurrence_rate)
+                    #rp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10)
+                    #threshold = rp.threshold_from_recurrence_rate(rp.distance_matrix(1, "supremum"), recurrence_rate)
                     # TODO: the function uses the supremum norm, is this okay?
 
                     # create S surrogates of the series yj
-                    surrogates = create_surrogates(yj, n_surrogates, threshold=threshold)
+                    surrogates = create_surrogates(yj, n_surrogates)#, threshold=threshold)
 
                     # for S surrogates, calculate the metric
                     m = [metric(yi, s) for s in surrogates]
