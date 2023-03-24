@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
+from sklearn.metrics import pairwise_distances
 from tqdm import tqdm
 from loguru import logger
 
@@ -14,6 +15,7 @@ def save_symmat(m, path):
     """
     Saves a symmetric matrix in condensed form as a .np file.
     """
+    np.fill_diagonal(m, 0)
     np.save(path, sp.spatial.distance.squareform(m))
 
 
@@ -24,21 +26,16 @@ def load_symmat(path):
     return sp.spatial.distance.squareform(np.load(path))
 
 
-def RecurrencePlot(y, recurrence_rate=0.1, threshold=None, **kwargs):
+def RecurrencePlot(y, recurrence_rate=0.1):
 
     # expand dimension for pdist
     if len(y.shape) == 1:
         y = np.expand_dims(y, axis=1)
 
     # calculate the distance between phase vectors
-    rp = sp.spatial.distance.squareform(sp.spatial.distance.pdist(y, 'euclidean'))
-    rp = np.nan_to_num(rp, nan=np.inf)
+    rp = pairwise_distances(y, metric="cityblock")
 
-    # use recurrence rate to determine threshold
-    if threshold is None:
-        threshold = np.quantile(rp, recurrence_rate)
-
-    return rp <= threshold
+    return rp <= np.quantile(rp, recurrence_rate)
 
 
 def create_surrogates(y, n_surrogates=1):
@@ -64,7 +61,7 @@ def pearson(yi, yj):
     return sp.stats.pearsonr(yi, yj)[0]
 
 
-def rmd(yi, yj, recurrence_rate=0.1, **kwargs):
+def rmd(yi, yj, recurrence_rate=0.1):
     """
     Recurrence based measure of dependence between to time series `yi` and `yj`.
 
@@ -87,11 +84,6 @@ def rmd(yi, yj, recurrence_rate=0.1, **kwargs):
 
     """
 
-    # generate the recurrence plots
-    # TODO: the function uses the supremum norm, is this okay?
-    #irp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
-    #jrp = RecurrencePlot(yj, recurrence_rate=recurrence_rate, silence_level=10, **kwargs)
-
     # get the recurrence matrices
     irp = RecurrencePlot(yi, recurrence_rate=recurrence_rate)
     jrp = RecurrencePlot(yj, recurrence_rate=recurrence_rate)
@@ -102,48 +94,9 @@ def rmd(yi, yj, recurrence_rate=0.1, **kwargs):
     Pj  = np.mean(jrp, axis=1)
 
     # calculate the recurrence based measure of dependence
-    rmd = np.log2(np.sum(Pij/(Pi*Pj)))
+    rmd = np.sum(Pij/(Pi*Pj))
 
-    return rmd if np.isfinite(rmd) else 0
-
-
-# def create_surrogates(y, n_surrogates=1, threshold=None, dimension=1, delay=0):
-#     """
-#     Generates twin surrogates of a time series `y`.
-#
-#     The surrogates are generated using the function `pyunicorn.twin_surrogates`.
-#
-#     Parameters
-#     ----------
-#     y: (n,) array
-#         Time series for which the surrogates should be generated.
-#     n_surrogates: int
-#         Number of surrogates to generate.
-#     threshold: float
-#         Distance threshold in phase space to determine twins.
-#     dimension: int, default 0
-#         Dimension for embedding
-#     delay: int, default 0
-#         Delay for twin creation.
-#
-#     Returns
-#     -------
-#     surrogates: (n_surrogates, n) or (n)
-#         Sequence of surrogates or only generated surrogate.
-#     """
-#
-#     # use 1% of the phase space extension as a threshold for the recurrence plot
-#     if threshold is None:
-#         threshold = 0.01*np.max(np.diff(y))
-#
-#     # set up surrogate generator
-#     surrogate_generator = Surrogates(y, silence_level=100)
-#     surrogate_generator.clear_cache()
-#
-#     # generate S surrogates
-#     surrogates = np.array([surrogate_generator.twin_surrogates(np.array([y]), dimension, delay, threshold) for s in range(n_surrogates)]).squeeze()
-#
-#     return surrogates if n_surrogates > 1 else np.array([surrogates])
+    return rmd
 
 
 def correlation_matrix(ys, n_surrogates=10, recurrence_rate=0.1, metric=pearson,
@@ -157,38 +110,37 @@ def correlation_matrix(ys, n_surrogates=10, recurrence_rate=0.1, metric=pearson,
     # empty matrix for significance
     S = np.zeros((N, N))
 
-    logger.info(f"Network with {N} nodes can have {N*(N+1)/2 - N} possible links")
-    logger.info(f"Using significance interval [{qlower:.3f}, {qupper:.3f}) based on {n_surrogates} surrogates")
-    logger.warning(f"Calculating correlation matrix, get a cup of coffee...")
+    #logger.info(f"Network with {N} nodes can have {N*(N+1)/2 - N} possible links")
+    #logger.info(f"Using significance interval [{qlower:.3f}, {qupper:.3f}) based on {n_surrogates} surrogates")
+    #logger.warning(f"Calculating correlation matrix, get a cup of coffee...")
 
     N = len(ys)
-    with tqdm(total=N*(N+1)/2 - N) as pbar:
+    #with tqdm(total=N*(N+1)/2 - N) as pbar:
+    for i ,yi in enumerate(ys):
+        for j, yj in enumerate(ys):
 
-        for i ,yi in enumerate(ys):
-            for j, yj in enumerate(ys):
+            if i > j:
 
-                if i > j:
+                # calculate the metric for this pair of yi, yj
+                C[i, j] = metric(yi, yj, **kwargs)
 
-                    # calculate the metric for this pair of yi, yj
-                    C[i, j] = metric(yi, yj, **kwargs)
+                # retrieve the recurrence threshold
+                #rp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10)
+                #threshold = rp.threshold_from_recurrence_rate(rp.distance_matrix(1, "supremum"), recurrence_rate)
+                # TODO: the function uses the supremum norm, is this okay?
 
-                    # retrieve the recurrence threshold
-                    #rp = RecurrencePlot(yi, recurrence_rate=recurrence_rate, silence_level=10)
-                    #threshold = rp.threshold_from_recurrence_rate(rp.distance_matrix(1, "supremum"), recurrence_rate)
-                    # TODO: the function uses the supremum norm, is this okay?
+                # create S surrogates of the series yj
+                surrogates = create_surrogates(yj, n_surrogates)#, threshold=threshold)
 
-                    # create S surrogates of the series yj
-                    surrogates = create_surrogates(yj, n_surrogates)#, threshold=threshold)
+                # for S surrogates, calculate the metric
+                m = [metric(yi, s) for s in surrogates]
+                q = np.quantile(m, [qlower, qupper])
 
-                    # for S surrogates, calculate the metric
-                    m = [metric(yi, s) for s in surrogates]
-                    q = np.quantile(m, [qlower, qupper])
+                # map whether effect is statistically significant
+                S[i, j] = (C[i, j] < q[0]) ^ (q[1] < C[i, j])
+                S[i, j] *= abs(np.mean(m) - C[i, j])
 
-                    # map whether effect is statistically significant
-                    S[i, j] = (C[i, j] < q[0]) ^ (q[1] < C[i, j])
-                    S[i, j] *= abs(np.mean(m) - C[i, j])
-
-                    pbar.update()
+                pbar.update()
 
     return C + C.T, S + S.T
 
@@ -269,7 +221,7 @@ def create_surrogate_adjacency_matrix(adjacency_matrix, distance_matrix, n_surro
     # calculate the link distances in the adjacency matrix
     d = link_distances(adjacency_matrix, distance_matrix)
 
-    logger.info(f"Calculated link lengths for {len(d)} links")
+    #logger.info(f"Calculated link lengths for {len(d)} links")
 
     # calculate probability that a link distance is seen
     counts_seen, bins = np.histogram(d, **kwargs)
@@ -282,7 +234,7 @@ def create_surrogate_adjacency_matrix(adjacency_matrix, distance_matrix, n_surro
     # center the bins
     bins = (bins[:-1] + bins[1:])/2
 
-    logger.info(f"Calculated seen and possible distributions in the interval [{bins[0]:.2f}, {bins[-1]:.2f})")
+    #logger.info(f"Calculated seen and possible distributions in the interval [{bins[0]:.2f}, {bins[-1]:.2f})")
 
     # calculate the link probability per distance
     probs = np.nan_to_num(counts_seen/counts_base, nan=0, posinf=0, neginf=0)
@@ -290,26 +242,26 @@ def create_surrogate_adjacency_matrix(adjacency_matrix, distance_matrix, n_surro
     # set up the n_surrogate matrices
     S = np.zeros((n_surrogates, *adjacency_matrix.shape), dtype=bool)
 
-    logger.info("Generating surrogates, drink a cup of tea...")
+    #logger.info("Generating surrogates, drink a cup of tea...")
 
     N = adjacency_matrix.shape[0]
-    with tqdm(total=N*(N+1)/2 - N) as pbar:
-        for i in range(N):
-            for j in range(N):
+    #with tqdm(total=N*(N+1)/2 - N) as pbar:
+    for i in range(N):
+        for j in range(N):
 
-                if i > j:
-                    # get the bin index of the distance matrix at this location
-                    bin_index = np.argmin(np.abs(bins - distance_matrix[i, j]))
+            if i > j:
+                # get the bin index of the distance matrix at this location
+                bin_index = np.argmin(np.abs(bins - distance_matrix[i, j]))
 
-                    # get the probability that for a link distance
-                    prob = probs[bin_index]
-                    prob *= (dmin < distance_matrix[i, j] < dmax)
+                # get the probability that for a link distance
+                prob = probs[bin_index]
+                prob *= (dmin < distance_matrix[i, j] < dmax)
 
-                    # randomly connect the nodes based on the distance
-                    S[:, i, j] = np.where(np.random.random(size=n_surrogates) < prob, True, False)
+                # randomly connect the nodes based on the distance
+                S[:, i, j] = np.where(np.random.random(size=n_surrogates) < prob, True, False)
 
-                    # update the pbar
-                    pbar.update()
+                # update the pbar
+                #pbar.update()
 
     # transpose all matrices
     S = S + np.transpose(S, axes=(0, 2, 1))
@@ -327,6 +279,7 @@ def create_surrogate_adjacency_matrix(adjacency_matrix, distance_matrix, n_surro
             else:
                 plt.show()
     except Exception as e:
-        logger.error(f"Error during plotting: {e}")
+        #logger.error(f"Error during plotting: {e}")
+        pass
 
     return S if n_surrogates > 1 else S[0]
