@@ -299,8 +299,10 @@ def betweenness(nx):
     return np.fromiter(networkx.betweenness_centrality(nx).values(), dtype="float32")
 
 
-def closeness(nx):
-    return np.fromiter(networkx.closeness_centrality(nx).values(), dtype="float32")
+def closeness(nx, D):
+    dist = {key: D[key[0], key[1]] for key in net.edges}
+    networkx.set_edge_attributes(nx, dist, "dist")
+    return np.fromiter(networkx.closeness_centrality(nx, distance="dist").values(), dtype="float32")
 
 
 def clustering_coefficient(nx):

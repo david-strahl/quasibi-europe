@@ -1,3 +1,4 @@
+import networkx
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
@@ -283,3 +284,39 @@ def create_surrogate_adjacency_matrix(adjacency_matrix, distance_matrix, n_surro
         pass
 
     return S if n_surrogates > 1 else S[0]
+
+
+def degree_centrality(nx):
+    return np.fromiter(networkx.degree_centrality(nx).values(), dtype="float32")
+
+
+def awc(nx, LAT):
+    AWC = np.sum(networkx.to_numpy_array(nx) * np.cos(np.deg2rad(LAT)), axis=0) / np.sum(np.cos(np.deg2rad(LAT)))
+    return AWC.reshape((25, 40))
+
+
+def betweenness(nx):
+    return np.fromiter(networkx.betweenness_centrality(nx).values(), dtype="float32")
+
+
+def closeness(nx, D):
+    dist = {key: D[key[0], key[1]] for key in net.edges}
+    networkx.set_edge_attributes(nx, dist, "dist")
+    return np.fromiter(networkx.closeness_centrality(nx, distance="dist").values(), dtype="float32")
+
+
+def clustering_coefficient(nx):
+    return np.fromiter(networkx.clustering(nx).values(), dtype="float32")
+
+
+def network_metric(A, func, surrogates=None, **kwargs):
+    # calculate the metric for the adjacency matrix
+    m = func(networkx.from_numpy_matrix(A), **kwargs).reshape((25, 40))
+
+    if surrogates is None:
+        return m
+    else:
+        M = np.mean(
+            [func(networkx.from_numpy_matrix(surrogate), **kwargs).reshape((25, 40)) for surrogate in tqdm(surrogates)],
+            axis=0)
+        return m, m - M, M
