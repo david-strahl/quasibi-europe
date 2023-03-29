@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 from sklearn.metrics import pairwise_distances
-from tqdm import tqdm
+from tqdm import tqdm_notebook as tqdm
 from loguru import logger
 
 # from pyunicorn.timeseries import RecurrencePlot
@@ -311,6 +311,7 @@ def clustering_coefficient(nx):
 
 def average_path_length(nx):
     return np.array([np.trim_zeros(np.fromiter(x[1].values(), dtype="float32")).mean() for x in networkx.shortest_path_length(nx)]).reshape((25, 40))
+
 
 def network_metric(A, func, surrogates=None, **kwargs):
     # calculate the metric for the adjacency matrix
