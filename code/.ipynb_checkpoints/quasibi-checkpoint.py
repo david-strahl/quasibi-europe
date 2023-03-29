@@ -300,7 +300,7 @@ def betweenness(nx):
 
 
 def closeness(nx, D):
-    dist = {key: D[key[0], key[1]] for key in net.edges}
+    dist = {key: D[key[0], key[1]] for key in nx.edges}
     networkx.set_edge_attributes(nx, dist, "dist")
     return np.fromiter(networkx.closeness_centrality(nx, distance="dist").values(), dtype="float32")
 
@@ -308,6 +308,9 @@ def closeness(nx, D):
 def clustering_coefficient(nx):
     return np.fromiter(networkx.clustering(nx).values(), dtype="float32")
 
+
+def average_path_length(nx):
+    return np.array([np.trim_zeros(np.fromiter(x[1].values(), dtype="float32")).mean() for x in networkx.shortest_path_length(nx)]).reshape((25, 40))
 
 def network_metric(A, func, surrogates=None, **kwargs):
     # calculate the metric for the adjacency matrix
